@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FairRide — Rides at Your Price</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div class="screen active" id="screen-auth">
+  <div class="bg-orb orb1"></div>
+  <div class="bg-orb orb2"></div>
+  <div class="auth-wrap">
+    <div class="brand-logo">Fair<span>Ride</span></div>
+    <p class="tagline">You set the price. Drivers compete.</p>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchTab('login')">Login</button>
+      <button class="auth-tab" onclick="switchTab('register')">Register</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="tab-login" class="auth-form">
+      <div class="input-group">
+        <label>Phone Number</label>
+        <div class="phone-input-wrap">
+          <span class="phone-prefix">+92</span>
+          <input type="tel" id="login-phone" placeholder="3XX XXXXXXX" maxlength="10"/>
+        </div>
+      </div>
+      <div class="input-group">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="Enter password"/>
+      </div>
+      <button class="btn-primary" onclick="login()">Login →</button>
+      <p class="auth-switch">Don't have an account? <a onclick="switchTab('register')">Register</a></p>
+    </div>
+
+    <!-- REGISTER -->
+    <div id="tab-register" class="auth-form" style="display:none">
+      <div class="input-group">
+        <label>Full Name</label>
+        <input type="text" id="reg-name" placeholder="Your full name"/>
+      </div>
+      <div class="input-group">
+        <label>Phone Number</label>
+        <div class="phone-input-wrap">
+          <span class="phone-prefix">+92</span>
+          <input type="tel" id="reg-phone" placeholder="3XX XXXXXXX" maxlength="10"/>
+        </div>
+      </div>
+      <div class="input-group">
+        <label>Password</label>
+        <input type="password" id="reg-password" placeholder="Min 6 characters"/>
+      </div>
+      <div class="input-group">
+        <label>I am a...</label>
+        <div class="role-toggle">
+          <button class="role-btn active" onclick="selectRole(this,'passenger')" data-role="passenger">🙋 Passenger</button>
+          <button class="role-btn" onclick="selectRole(this,'driver')" data-role="driver">🚗 Driver</button>
+        </div>
+      </div>
+      <!-- Driver extras -->
+      <div id="driver-reg-extras" style="display:none">
+        <div class="input-group">
+          <label>Vehicle Model</label>
+          <input type="text" id="reg-vehicle" placeholder="e.g. Toyota Corolla 2020"/>
+        </div>
+        <div class="input-group">
+          <label>License Plate</label>
+          <input type="text" id="reg-plate" placeholder="e.g. ABC-123"/>
+        </div>
+        <div class="input-group">
+          <label>CNIC Number</label>
+          <input type="text" id="reg-cnic" placeholder="XXXXX-XXXXXXX-X"/>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="register()">Create Account →</button>
+      <p class="auth-switch">Already have an account? <a onclick="switchTab('login')">Login</a></p>
+    </div>
+  </div>
+</div>
+
+<!-- PASSENGER SCREEN -->
+<div class="screen" id="screen-passenger">
+  <div class="app-header">
+    <div>
+      <div class="brand">Fair<span>Ride</span></div>
+      <div class="header-sub" id="p-user-name">Passenger</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <div class="header-role">Passenger</div>
+      <button class="btn-icon" onclick="logout()" title="Logout">⏻</button>
+    </div>
+  </div>
+
+  <div id="map-passenger"></div>
+
+  <div class="panel" id="panel-passenger-book">
+    <div class="steps">
+      <div class="step active" id="ps1"></div>
+      <div class="step" id="ps2"></div>
+      <div class="step" id="ps3"></div>
+    </div>
+    <div class="panel-title" id="passenger-panel-title">Where are you going?</div>
+
+    <!-- STEP 1 -->
+    <div id="pstep-1">
+      <div class="input-group">
+        <label>📍 Pickup Location</label>
+        <input type="text" id="pickup-input" placeholder="Enter pickup address"/>
+      </div>
+      <div class="input-group">
+        <label>🏁 Drop-off Location</label>
+        <input type="text" id="dropoff-input" placeholder="Enter destination"/>
+      </div>
+      <button class="btn-primary" onclick="passengerStep2()">Continue →</button>
+    </div>
+
+    <!-- STEP 2 -->
+    <div id="pstep-2" style="display:none">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">Suggested fares for this route:</p>
+      <div class="fare-suggestion" id="fare-suggestions">
+        <div class="fare-chip" onclick="selectFare(this,250)">PKR 250</div>
+        <div class="fare-chip" onclick="selectFare(this,300)">PKR 300</div>
+        <div class="fare-chip" onclick="selectFare(this,350)">PKR 350</div>
+        <div class="fare-chip" onclick="selectFare(this,400)">PKR 400</div>
+      </div>
+      <div class="input-group">
+        <label>Your Offer (PKR)</label>
+        <input type="number" id="fare-input" placeholder="e.g. 300" min="50"/>
+      </div>
+      <div class="input-group">
+        <label>Payment Method</label>
+        <select id="payment-method" class="select-input">
+          <option value="cash">💵 Cash</option>
+          <option value="jazzcash">📱 JazzCash</option>
+          <option value="easypaisa">📱 EasyPaisa</option>
+        </select>
+      </div>
+      <button class="btn-primary" onclick="passengerStep3()">Find Drivers →</button>
+      <button class="btn-text" onclick="passengerStep1()">← Change Route</button>
+    </div>
+
+    <!-- STEP 3 -->
+    <div id="pstep-3" style="display:none">
+      <div class="status-bar status-waiting" id="p-status-bar">
+        <div class="pulse"></div>
+        <span id="p-status-text">Looking for nearby drivers...</span>
+      </div>
+      <div id="p-counter-received" style="display:none">
+        <div class="ride-info-card" style="text-align:center;padding:24px;">
+          <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">Driver's counter offer</p>
+          <div class="fare-highlight" id="p-counter-amount" style="font-size:42px;">PKR 350</div>
+          <p style="font-size:12px;color:var(--muted);margin-top:6px;" id="p-counter-driver-name"></p>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:16px;">
+          <button class="btn-primary btn-success" style="flex:1;" onclick="acceptCounter()">✓ Accept</button>
+          <button class="btn-primary btn-danger" style="flex:1;" onclick="declineCounter()">✗ Decline</button>
+        </div>
+      </div>
+      <div id="p-ride-info" style="display:none">
+        <div class="ride-info-card">
+          <div class="ride-info-row"><span class="ride-info-label">Driver</span><span class="ride-info-value" id="p-driver-name">—</span></div>
+          <div class="ride-info-row"><span class="ride-info-label">Vehicle</span><span class="ride-info-value" id="p-vehicle">—</span></div>
+          <div class="ride-info-row"><span class="ride-info-label">Agreed Fare</span><span class="fare-highlight" id="p-agreed-fare">—</span></div>
+          <div class="ride-info-row"><span class="ride-info-label">Payment</span><span class="ride-info-value" id="p-payment">—</span></div>
+          <div class="ride-info-row"><span class="ride-info-label">ETA</span><span class="ride-info-value" id="p-eta">—</span></div>
+        </div>
+        <div id="p-jazzcash-panel" style="display:none">
+          <div class="payment-box">
+            <div class="payment-logo">📱 JazzCash</div>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">Pay to FairRide wallet</p>
+            <div class="payment-number">0300-1234567</div>
+            <div class="payment-amount" id="p-pay-amount">PKR —</div>
+            <button class="btn-primary btn-success" style="margin-top:12px;" onclick="confirmPayment()">✓ Mark as Paid</button>
+          </div>
+        </div>
+      </div>
+      <button class="btn-primary btn-outline" id="p-cancel-btn" onclick="cancelRide()">Cancel Ride</button>
+      <p class="commission-note">Platform fee: <span>10%</span> of agreed fare</p>
+    </div>
+  </div>
+</div>
+
+<!-- DRIVER SCREEN -->
+<div class="screen" id="screen-driver">
+  <div class="app-header">
+    <div>
+      <div class="brand">Fair<span>Ride</span></div>
+      <div class="header-sub" id="d-user-name">Driver</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <div class="header-role">Driver</div>
+      <button class="btn-icon" onclick="logout()" title="Logout">⏻</button>
+    </div>
+  </div>
+
+  <div id="map-driver"></div>
+
+  <div class="panel">
+    <!-- Online Toggle -->
+    <div class="toggle-wrap">
+      <label class="toggle">
+        <input type="checkbox" id="driver-online-toggle" onchange="toggleDriverOnline(this)">
+        <div class="toggle-slider"></div>
+      </label>
+      <span class="toggle-label" id="driver-status-label"><span class="offline">⚫ Offline</span></span>
+    </div>
+
+    <!-- Earnings Strip -->
+    <div class="earnings-strip">
+      <div class="earning-stat">
+        <div class="value" id="d-rides">0</div>
+        <div class="label">Rides</div>
+      </div>
+      <div class="earning-stat">
+        <div class="value" id="d-earned">PKR 0</div>
+        <div class="label">Earned</div>
+      </div>
+      <div class="earning-stat">
+        <div class="value" id="d-commission">PKR 0</div>
+        <div class="label">Platform Fee</div>
+      </div>
+      <div class="earning-stat" onclick="showWithdrawModal()" style="cursor:pointer;border-color:rgba(240,192,64,0.3)">
+        <div class="value" style="color:var(--accent)">↑</div>
+        <div class="label">Withdraw</div>
+      </div>
+    </div>
+
+    <div id="driver-offline-msg">
+      <p style="text-align:center;color:var(--muted);font-size:14px;padding:20px 0;">Toggle online to see ride requests</p>
+    </div>
+
+    <div id="driver-online-panel" style="display:none">
+      <div class="panel-title">Nearby Requests</div>
+      <div class="requests-list" id="requests-list"></div>
+      <div id="no-requests" style="display:none;text-align:center;color:var(--muted);font-size:14px;padding:20px 0;">No requests nearby...</div>
+
+      <div id="active-ride-panel" style="display:none">
+        <div class="status-bar status-active"><div class="pulse"></div><span>Ride in progress</span></div>
+        <div class="ride-info-card">
+          <div class="ride-info-row"><span class="ride-info-label">Passenger</span><span class="ride-info-value" id="d-passenger-name">—</span></div>
+          <div class="ride-info-row"><span class="ride-info-label">From</span><span class="ride-info-value" id="d-from">—</span></div>
+          <div class="ride-info-row"><span class="ride-info-label">To</span><span class="ride-info-value" id="d-to">—</span></div>
+          <div class="ride-info-row"><span class="ride-info-label">Fare</span><span class="fare-highlight" id="d-fare">—</span></div>
+          <div class="ride-info-row"><span class="ride-info-label">Payment</span><span class="ride-info-value" id="d-payment-method">—</span></div>
+          <div class="ride-info-row"><span class="ride-info-label">Your Earnings (90%)</span><span class="ride-info-value" style="color:var(--green)" id="d-net">—</span></div>
+        </div>
+        <button class="btn-primary btn-success" onclick="completeRide()">✓ Complete Ride</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COUNTER OFFER MODAL -->
+<div class="modal-overlay" id="counter-modal">
+  <div class="modal">
+    <div class="modal-title">Counter Offer</div>
+    <div class="modal-sub" id="counter-modal-sub">Passenger offered PKR 300</div>
+    <div class="counter-amount-display" id="counter-display">PKR 350</div>
+    <input type="range" class="counter-slider" id="counter-slider" min="100" max="1000" value="350" oninput="updateCounter(this.value)">
+    <div class="modal-actions">
+      <button style="background:var(--surface2);color:var(--muted);" onclick="closeCounterModal()">Cancel</button>
+      <button style="background:var(--accent);color:#0a0a0f;" onclick="sendCounter()">Send Offer</button>
+    </div>
+  </div>
+</div>
+
+<!-- WITHDRAW MODAL -->
+<div class="modal-overlay" id="withdraw-modal">
+  <div class="modal">
+    <div class="modal-title">💸 Withdraw Earnings</div>
+    <div class="modal-sub">Your available balance</div>
+    <div class="counter-amount-display" id="withdraw-balance" style="color:var(--green)">PKR 0</div>
+    <div class="input-group" style="margin-bottom:16px;">
+      <label>Withdraw To</label>
+      <select id="withdraw-method" class="select-input">
+        <option value="jazzcash">📱 JazzCash</option>
+        <option value="easypaisa">📱 EasyPaisa</option>
+        <option value="bank">🏦 Bank Transfer</option>
+      </select>
+    </div>
+    <div class="input-group" style="margin-bottom:16px;">
+      <label>Account Number / Phone</label>
+      <input type="text" id="withdraw-account" placeholder="03XX-XXXXXXX or Account No."/>
+    </div>
+    <div class="input-group" style="margin-bottom:24px;">
+      <label>Amount (PKR)</label>
+      <input type="number" id="withdraw-amount" placeholder="Enter amount"/>
+    </div>
+    <div class="modal-actions">
+      <button style="background:var(--surface2);color:var(--muted);" onclick="closeWithdrawModal()">Cancel</button>
+      <button style="background:var(--green);color:#0a0a0f;font-weight:700;" onclick="submitWithdrawal()">Withdraw</button>
+    </div>
+  </div>
+</div>
+
+<!-- NOTIFICATION -->
+<div class="notification" id="notification">
+  <div class="notif-icon" id="notif-icon">🔔</div>
+  <div>
+    <div class="notif-title" id="notif-title"></div>
+    <div class="notif-body" id="notif-body"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
