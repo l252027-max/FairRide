@@ -18,6 +18,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'fairride_secret_2024';
 const COMMISSION_RATE = 0.10; // 10%
+const OWNER_JAZZCASH = '03334712255'; // Commission goes here
 
 // =============================================
 // IN-MEMORY DATABASE (replace with MongoDB/PostgreSQL in production)
@@ -147,7 +148,11 @@ app.get('/admin/stats', (req, res) => {
   const totalCommission = db.rides.reduce((sum, r) => sum + (r.commission || 0), 0);
   const totalUsers = db.users.length;
   const pendingWithdrawals = db.withdrawals.filter(w => w.status === 'pending').length;
-  res.json({ success:true, totalRides, totalCommission, totalUsers, pendingWithdrawals });
+  res.json({ 
+    success:true, totalRides, totalCommission, totalUsers, pendingWithdrawals,
+    ownerJazzCash: OWNER_JAZZCASH,
+    message: `PKR ${totalCommission} commission earned → Send to ${OWNER_JAZZCASH}`
+  });
 });
 
 // =============================================
@@ -241,6 +246,10 @@ io.on('connection', (socket) => {
         passengerId, fare, commission, net,
         completedAt: new Date()
       });
+
+      // Commission tracking — send to owner JazzCash: 03334712255
+      console.log(`💰 Commission earned: PKR ${commission} → Owner JazzCash: ${OWNER_JAZZCASH}`);
+      db.totalCommission = (db.totalCommission || 0) + commission;
     }
     // Notify passenger
     if (passengerId) {
