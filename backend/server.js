@@ -141,18 +141,70 @@ app.get('/driver/rides', (req, res) => {
 });
 
 // =============================================
-// ADMIN ROUTES (basic)
+// ADMIN ROUTES
 // =============================================
 app.get('/admin/stats', (req, res) => {
   const totalRides = db.rides.length;
   const totalCommission = db.rides.reduce((sum, r) => sum + (r.commission || 0), 0);
   const totalUsers = db.users.length;
   const pendingWithdrawals = db.withdrawals.filter(w => w.status === 'pending').length;
-  res.json({ 
-    success:true, totalRides, totalCommission, totalUsers, pendingWithdrawals,
-    ownerJazzCash: OWNER_JAZZCASH,
-    message: `PKR ${totalCommission} commission earned → Send to ${OWNER_JAZZCASH}`
+  res.json({ success:true, totalRides, totalCommission, totalUsers, pendingWithdrawals, ownerJazzCash: OWNER_JAZZCASH });
+});
+
+app.get('/admin/rides', (req, res) => {
+  const ridesWithNames = db.rides.map(r => {
+    const passenger = db.users.find(u => u.id === r.passengerId);
+    const driver = db.users.find(u => u.id === r.driverId);
+    return { ...r, passenger: passenger?.name || 'Unknown', driver: driver?.name || 'Unknown' };
+  }).reverse();
+  res.json({ success:true, rides: ridesWithNames });
+});
+
+app.get('/admin/drivers', (req, res) => {
+  const drivers = db.users.filter(u => u.role === 'driver').map(({ password, ...d }) => ({
+    ...d, online: onlineDrivers.has(d.id)
+  }));
+  res.json({ success:true, drivers });
+});
+
+app.get('/admin/passengers', (req, res) => {
+  const passengers = db.users.filter(u => u.role === 'passenger').map(({ password, ...p }) => {
+    const rideCount = db.rides.filter(r => r.passengerId === p.id).length;
+    return { ...p, totalRides: rideCount };
   });
+  res.json({ success:true, passengers });
+});
+
+app.get('/admin/withdrawals', (req, res) => {
+  const enriched = db.withdrawals.map(w => {
+    const driver = db.users.find(u => u.id === w.driverId);
+    return { ...w, driverName: driver?.name || 'Unknown' };
+  }).reverse();
+  res.json({ success:true, withdrawals: enriched });
+});
+
+app.get('/admin/live-users', (req, res) => {
+  const users = Object.values(db.activeConnections).map(c => {
+    const user = db.users.find(u => u.id === c.userId);
+    return { name: user?.name || 'Unknown', role: c.role, phone: user?.phone, connectedAt: c.connectedAt };
+  }).filter(u => u.role !== 'admin');
+  res.json({ success:true, users });
+});
+
+app.post('/admin/withdrawal/approve', (req, res) => {
+  const w = db.withdrawals.find(x => x.id === req.body.withdrawalId);
+  if (w) { w.status = 'approved'; w.processedAt = new Date(); }
+  res.json({ success:true });
+});
+
+app.post('/admin/withdrawal/reject', (req, res) => {
+  const w = db.withdrawals.find(x => x.id === req.body.withdrawalId);
+  if (w) {
+    w.status = 'rejected';
+    const driver = db.users.find(u => u.id === w.driverId);
+    if (driver) driver.balance += w.amount;
+  }
+  res.json({ success:true });
 });
 
 // =============================================
@@ -167,7 +219,7 @@ io.on('connection', (socket) => {
   socket.on('identify', ({ userId, role }) => {
     socket.userId = userId;
     socket.userRole = role;
-    db.activeConnections[socket.id] = { userId, role };
+    db.activeConnections[socket.id] = { userId, role, connectedAt: new Date() };
     if (role === 'driver') {
       socket.join('drivers');
     }

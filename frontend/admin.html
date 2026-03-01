@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FairRide Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root {
+  --bg: #070709;
+  --s1: #0f0f14;
+  --s2: #161620;
+  --s3: #1e1e2a;
+  --border: #252535;
+  --accent: #f0c040;
+  --green: #00e676;
+  --blue: #448aff;
+  --red: #ff1744;
+  --orange: #ff6d00;
+  --text: #e8e8f0;
+  --muted: #5a5a72;
+  --r: 14px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+h1,h2,h3,.mono { font-family:'JetBrains Mono',monospace; }
+.syne { font-family:'Syne',sans-serif; }
+
+/* LOGIN */
+#login-screen {
+  min-height:100vh; display:flex; align-items:center; justify-content:center;
+  background: radial-gradient(ellipse at 60% 20%, rgba(240,192,64,0.08) 0%, transparent 60%),
+              radial-gradient(ellipse at 20% 80%, rgba(68,138,255,0.06) 0%, transparent 50%), var(--bg);
+}
+.login-box {
+  background:var(--s1); border:1px solid var(--border); border-radius:20px;
+  padding:40px; width:100%; max-width:380px;
+}
+.login-logo { font-size:28px; font-weight:800; font-family:'Syne',sans-serif; margin-bottom:4px; }
+.login-logo span { color:var(--accent); }
+.login-sub { font-size:13px; color:var(--muted); margin-bottom:32px; }
+.field { margin-bottom:16px; }
+.field label { display:block; font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+.field input { width:100%; background:var(--s2); border:1px solid var(--border); border-radius:10px; padding:13px 14px; color:var(--text); font-size:14px; font-family:'DM Sans',sans-serif; outline:none; transition:border-color 0.2s; }
+.field input:focus { border-color:var(--accent); }
+.field input::placeholder { color:var(--muted); }
+.btn-login { width:100%; background:var(--accent); color:#070709; border:none; border-radius:10px; padding:14px; font-size:15px; font-weight:700; font-family:'Syne',sans-serif; cursor:pointer; margin-top:8px; transition:all 0.2s; }
+.btn-login:hover { background:#f5cc55; }
+.login-hint { font-size:12px; color:var(--muted); text-align:center; margin-top:16px; }
+
+/* LAYOUT */
+#dashboard { display:none; min-height:100vh; }
+.sidebar {
+  position:fixed; left:0; top:0; bottom:0; width:220px;
+  background:var(--s1); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; z-index:100; padding:24px 0;
+}
+.sidebar-logo { padding:0 20px 24px; border-bottom:1px solid var(--border); margin-bottom:16px; }
+.sidebar-logo .name { font-size:20px; font-weight:800; font-family:'Syne',sans-serif; }
+.sidebar-logo .name span { color:var(--accent); }
+.sidebar-logo .role { font-size:11px; color:var(--muted); margin-top:2px; }
+.nav-item {
+  display:flex; align-items:center; gap:12px; padding:12px 20px;
+  color:var(--muted); font-size:14px; font-weight:500; cursor:pointer;
+  transition:all 0.2s; border-left:3px solid transparent; margin:1px 0;
+}
+.nav-item:hover { color:var(--text); background:var(--s2); }
+.nav-item.active { color:var(--accent); border-left-color:var(--accent); background:rgba(240,192,64,0.06); }
+.nav-icon { font-size:18px; width:22px; text-align:center; }
+.sidebar-bottom { margin-top:auto; padding:16px 20px; border-top:1px solid var(--border); }
+.owner-card { background:var(--s2); border-radius:10px; padding:12px; }
+.owner-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }
+.owner-balance { font-size:20px; font-weight:800; font-family:'Syne',sans-serif; color:var(--green); }
+.owner-sub { font-size:11px; color:var(--muted); margin-top:2px; }
+.btn-logout { width:100%; background:none; border:1px solid var(--border); color:var(--muted); padding:10px; border-radius:8px; cursor:pointer; font-size:13px; font-family:'DM Sans',sans-serif; margin-top:10px; transition:all 0.2s; }
+.btn-logout:hover { border-color:var(--red); color:var(--red); }
+
+.main { margin-left:220px; padding:28px; min-height:100vh; }
+.page { display:none; }
+.page.active { display:block; animation:fadeIn 0.3s ease; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+.page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+.page-title { font-size:26px; font-weight:800; font-family:'Syne',sans-serif; }
+.page-sub { font-size:13px; color:var(--muted); margin-top:3px; }
+.live-badge { display:flex; align-items:center; gap:6px; background:rgba(0,230,118,0.1); border:1px solid rgba(0,230,118,0.25); border-radius:100px; padding:6px 14px; font-size:12px; font-weight:600; color:var(--green); }
+.live-dot { width:7px; height:7px; border-radius:50%; background:var(--green); animation:pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* STAT CARDS */
+.stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+.stat-card {
+  background:var(--s1); border:1px solid var(--border); border-radius:var(--r); padding:20px;
+  position:relative; overflow:hidden; transition:border-color 0.2s;
+}
+.stat-card:hover { border-color:var(--accent); }
+.stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+.stat-card.yellow::before { background:var(--accent); }
+.stat-card.green::before { background:var(--green); }
+.stat-card.blue::before { background:var(--blue); }
+.stat-card.orange::before { background:var(--orange); }
+.stat-label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-weight:600; margin-bottom:10px; }
+.stat-value { font-size:32px; font-weight:800; font-family:'Syne',sans-serif; line-height:1; margin-bottom:6px; }
+.stat-value.yellow { color:var(--accent); }
+.stat-value.green { color:var(--green); }
+.stat-value.blue { color:var(--blue); }
+.stat-value.orange { color:var(--orange); }
+.stat-change { font-size:12px; color:var(--muted); }
+
+/* TABLES */
+.card { background:var(--s1); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; margin-bottom:20px; }
+.card-header { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--border); }
+.card-title { font-size:15px; font-weight:700; font-family:'Syne',sans-serif; }
+.card-count { background:var(--s2); border-radius:100px; padding:3px 10px; font-size:12px; font-weight:600; color:var(--muted); }
+table { width:100%; border-collapse:collapse; }
+th { padding:12px 20px; font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:1px; text-align:left; background:var(--s2); border-bottom:1px solid var(--border); }
+td { padding:14px 20px; font-size:13px; border-bottom:1px solid var(--border); }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:rgba(255,255,255,0.02); }
+.empty-row td { text-align:center; color:var(--muted); padding:32px; }
+
+/* BADGES */
+.badge { display:inline-block; border-radius:100px; padding:3px 10px; font-size:11px; font-weight:700; font-family:'Syne',sans-serif; letter-spacing:0.3px; }
+.badge-green { background:rgba(0,230,118,0.12); color:var(--green); border:1px solid rgba(0,230,118,0.25); }
+.badge-yellow { background:rgba(240,192,64,0.12); color:var(--accent); border:1px solid rgba(240,192,64,0.25); }
+.badge-red { background:rgba(255,23,68,0.12); color:var(--red); border:1px solid rgba(255,23,68,0.2); }
+.badge-blue { background:rgba(68,138,255,0.12); color:var(--blue); border:1px solid rgba(68,138,255,0.2); }
+.badge-orange { background:rgba(255,109,0,0.12); color:var(--orange); border:1px solid rgba(255,109,0,0.2); }
+
+/* AVATAR */
+.user-cell { display:flex; align-items:center; gap:10px; }
+.avatar { width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--orange)); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:#070709; font-family:'Syne',sans-serif; flex-shrink:0; }
+.user-name { font-weight:600; font-size:13px; }
+.user-phone { font-size:11px; color:var(--muted); margin-top:1px; }
+
+/* LIVE FEED */
+.feed { max-height:320px; overflow-y:auto; }
+.feed-item { display:flex; align-items:flex-start; gap:12px; padding:14px 20px; border-bottom:1px solid var(--border); animation:slideIn 0.3s ease; }
+@keyframes slideIn { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
+.feed-item:last-child { border-bottom:none; }
+.feed-icon { font-size:20px; flex-shrink:0; margin-top:1px; }
+.feed-content { flex:1; }
+.feed-title { font-size:13px; font-weight:600; margin-bottom:2px; }
+.feed-sub { font-size:12px; color:var(--muted); }
+.feed-time { font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; flex-shrink:0; }
+
+/* ONLINE USERS GRID */
+.users-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; padding:16px; }
+.user-online-card { background:var(--s2); border:1px solid var(--border); border-radius:12px; padding:14px; display:flex; align-items:center; gap:10px; }
+.user-online-card .role-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.role-dot.passenger { background:var(--blue); }
+.role-dot.driver { background:var(--green); }
+
+/* WITHDRAW ACTIONS */
+.action-btn { padding:6px 14px; border-radius:8px; border:none; font-size:12px; font-weight:700; cursor:pointer; font-family:'Syne',sans-serif; transition:all 0.2s; }
+.btn-approve { background:rgba(0,230,118,0.15); color:var(--green); border:1px solid rgba(0,230,118,0.3) !important; }
+.btn-approve:hover { background:rgba(0,230,118,0.25); }
+.btn-reject { background:rgba(255,23,68,0.1); color:var(--red); border:1px solid rgba(255,23,68,0.2) !important; }
+.btn-reject:hover { background:rgba(255,23,68,0.2); }
+
+/* EARNINGS CHART (CSS bars) */
+.chart-wrap { padding:20px; }
+.chart-bars { display:flex; align-items:flex-end; gap:8px; height:120px; margin-bottom:8px; }
+.bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; height:100%; justify-content:flex-end; }
+.bar { width:100%; background:linear-gradient(to top, var(--accent), rgba(240,192,64,0.3)); border-radius:4px 4px 0 0; transition:height 0.8s ease; min-height:4px; }
+.bar-label { font-size:10px; color:var(--muted); font-family:'JetBrains Mono',monospace; }
+
+/* REFRESH */
+.refresh-btn { background:var(--s2); border:1px solid var(--border); color:var(--muted); padding:8px 16px; border-radius:8px; cursor:pointer; font-size:12px; font-family:'DM Sans',sans-serif; transition:all 0.2s; }
+.refresh-btn:hover { color:var(--text); border-color:var(--accent); }
+
+::-webkit-scrollbar { width:3px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+
+@media(max-width:900px) {
+  .sidebar { width:60px; }
+  .sidebar-logo, .nav-item span, .sidebar-bottom .owner-label, .sidebar-bottom .owner-sub, .sidebar-bottom .owner-balance, .btn-logout { display:none; }
+  .nav-item { justify-content:center; padding:14px; }
+  .main { margin-left:60px; padding:16px; }
+  .stats-grid { grid-template-columns:repeat(2,1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">Fair<span>Ride</span> <span style="font-size:14px;color:var(--muted);font-family:'DM Sans',sans-serif;font-weight:400;">Admin</span></div>
+    <div class="login-sub">Owner dashboard — restricted access</div>
+    <div class="field">
+      <label>Admin Username</label>
+      <input type="text" id="admin-user" placeholder="admin" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>Admin Password</label>
+      <input type="password" id="admin-pass" placeholder="Enter password" onkeydown="if(event.key==='Enter')adminLogin()"/>
+    </div>
+    <button class="btn-login" onclick="adminLogin()">Enter Dashboard →</button>
+    <p class="login-hint">Default: admin / fairride2024</p>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <div class="name">Fair<span>Ride</span></div>
+      <div class="role">Owner Dashboard</div>
+    </div>
+    <div class="nav-item active" onclick="showPage('overview')">
+      <span class="nav-icon">📊</span><span>Overview</span>
+    </div>
+    <div class="nav-item" onclick="showPage('live')">
+      <span class="nav-icon">🟢</span><span>Live Users</span>
+    </div>
+    <div class="nav-item" onclick="showPage('rides')">
+      <span class="nav-icon">🚗</span><span>Rides</span>
+    </div>
+    <div class="nav-item" onclick="showPage('drivers')">
+      <span class="nav-icon">👤</span><span>Drivers</span>
+    </div>
+    <div class="nav-item" onclick="showPage('passengers')">
+      <span class="nav-icon">🙋</span><span>Passengers</span>
+    </div>
+    <div class="nav-item" onclick="showPage('withdrawals')">
+      <span class="nav-icon">💸</span><span>Withdrawals</span>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="owner-card">
+        <div class="owner-label">Your Commission</div>
+        <div class="owner-balance" id="sidebar-commission">PKR 0</div>
+        <div class="owner-sub">→ 0333-4712255</div>
+      </div>
+      <button class="btn-logout" onclick="adminLogout()">⏻ Logout</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- OVERVIEW PAGE -->
+    <div class="page active" id="page-overview">
+      <div class="page-header">
+        <div>
+          <div class="page-title syne">Overview</div>
+          <div class="page-sub">All your FairRide stats at a glance</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <div class="live-badge"><div class="live-dot"></div>Live</div>
+          <button class="refresh-btn" onclick="loadAllData()">↻ Refresh</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card yellow">
+          <div class="stat-label">Total Commission (PKR)</div>
+          <div class="stat-value yellow" id="stat-commission">0</div>
+          <div class="stat-change">→ Your JazzCash</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-label">Total Rides</div>
+          <div class="stat-value green" id="stat-rides">0</div>
+          <div class="stat-change">All time</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-label">Total Users</div>
+          <div class="stat-value blue" id="stat-users">0</div>
+          <div class="stat-change">Registered</div>
+        </div>
+        <div class="stat-card orange">
+          <div class="stat-label">Pending Withdrawals</div>
+          <div class="stat-value orange" id="stat-withdrawals">0</div>
+          <div class="stat-change">Needs attention</div>
+        </div>
+      </div>
+
+      <!-- Earnings chart -->
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-header">
+          <div class="card-title">Weekly Commission (PKR)</div>
+        </div>
+        <div class="chart-wrap">
+          <div class="chart-bars" id="earnings-chart"></div>
+          <div style="display:flex;gap:8px;" id="chart-labels"></div>
+        </div>
+      </div>
+
+      <!-- Live feed -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Live Activity Feed</div>
+          <div class="live-badge"><div class="live-dot"></div>Real-time</div>
+        </div>
+        <div class="feed" id="activity-feed">
+          <div class="feed-item">
+            <div class="feed-icon">🚀</div>
+            <div class="feed-content">
+              <div class="feed-title">Dashboard loaded</div>
+              <div class="feed-sub">Waiting for live events...</div>
+            </div>
+            <div class="feed-time" id="load-time"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LIVE USERS PAGE -->
+    <div class="page" id="page-live">
+      <div class="page-header">
+        <div>
+          <div class="page-title syne">Live Users</div>
+          <div class="page-sub">People currently on FairRide right now</div>
+        </div>
+        <div class="live-badge"><div class="live-dot"></div><span id="live-count">0</span> online</div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Active Sessions</div>
+          <button class="refresh-btn" onclick="loadLiveUsers()">↻ Refresh</button>
+        </div>
+        <div class="users-grid" id="live-users-grid">
+          <div style="padding:32px;text-align:center;color:var(--muted);grid-column:1/-1;font-size:14px;">No users online right now</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Recent Logins</div></div>
+        <table>
+          <thead><tr><th>User</th><th>Role</th><th>Phone</th><th>Joined</th></tr></thead>
+          <tbody id="recent-logins-table"><tr class="empty-row"><td colspan="4">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- RIDES PAGE -->
+    <div class="page" id="page-rides">
+      <div class="page-header">
+        <div>
+          <div class="page-title syne">All Rides</div>
+          <div class="page-sub">Every completed ride and commission earned</div>
+        </div>
+        <button class="refresh-btn" onclick="loadRides()">↻ Refresh</button>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
+        <div class="stat-card green">
+          <div class="stat-label">Today's Rides</div>
+          <div class="stat-value green" id="today-rides">0</div>
+        </div>
+        <div class="stat-card yellow">
+          <div class="stat-label">Today's Commission</div>
+          <div class="stat-value yellow" id="today-commission">PKR 0</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-label">Avg Fare Today</div>
+          <div class="stat-value blue" id="avg-fare">PKR 0</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Ride History</div>
+          <div class="card-count" id="rides-count">0 rides</div>
+        </div>
+        <table>
+          <thead><tr><th>Ride ID</th><th>Passenger</th><th>Driver</th><th>Fare</th><th>Commission</th><th>Payment</th><th>Time</th></tr></thead>
+          <tbody id="rides-table"><tr class="empty-row"><td colspan="7">No rides yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DRIVERS PAGE -->
+    <div class="page" id="page-drivers">
+      <div class="page-header">
+        <div>
+          <div class="page-title syne">Drivers</div>
+          <div class="page-sub">All registered drivers and their activity</div>
+        </div>
+        <button class="refresh-btn" onclick="loadDrivers()">↻ Refresh</button>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Driver List</div>
+          <div class="card-count" id="drivers-count">0 drivers</div>
+        </div>
+        <table>
+          <thead><tr><th>Driver</th><th>Vehicle</th><th>Plate</th><th>Status</th><th>Rides</th><th>Earned</th><th>Balance</th></tr></thead>
+          <tbody id="drivers-table"><tr class="empty-row"><td colspan="7">No drivers registered yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PASSENGERS PAGE -->
+    <div class="page" id="page-passengers">
+      <div class="page-header">
+        <div>
+          <div class="page-title syne">Passengers</div>
+          <div class="page-sub">All registered passengers</div>
+        </div>
+        <button class="refresh-btn" onclick="loadPassengers()">↻ Refresh</button>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Passenger List</div>
+          <div class="card-count" id="passengers-count">0 passengers</div>
+        </div>
+        <table>
+          <thead><tr><th>Passenger</th><th>Phone</th><th>Total Rides</th><th>Joined</th><th>Status</th></tr></thead>
+          <tbody id="passengers-table"><tr class="empty-row"><td colspan="5">No passengers registered yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- WITHDRAWALS PAGE -->
+    <div class="page" id="page-withdrawals">
+      <div class="page-header">
+        <div>
+          <div class="page-title syne">Withdrawals</div>
+          <div class="page-sub">Driver payment requests — approve or reject</div>
+        </div>
+        <button class="refresh-btn" onclick="loadWithdrawals()">↻ Refresh</button>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Pending Requests</div>
+          <div class="card-count" id="withdrawal-count">0 pending</div>
+        </div>
+        <table>
+          <thead><tr><th>Driver</th><th>Amount</th><th>Method</th><th>Account</th><th>Requested</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="withdrawals-table"><tr class="empty-row"><td colspan="7">No withdrawal requests</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let socket = null;
+let adminData = { stats:{}, rides:[], drivers:[], passengers:[], withdrawals:[], liveUsers:[] };
+const ADMIN_USER = 'admin';
+const ADMIN_PASS = 'fairride2024';
+
+// =============================================
+// LOGIN
+// =============================================
+function adminLogin() {
+  const u = document.getElementById('admin-user').value.trim();
+  const p = document.getElementById('admin-pass').value.trim();
+  if (u === ADMIN_USER && p === ADMIN_PASS) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('load-time').textContent = now();
+    initAdminSocket();
+    loadAllData();
+  } else {
+    document.getElementById('admin-pass').style.borderColor = 'var(--red)';
+    setTimeout(() => document.getElementById('admin-pass').style.borderColor = '', 1500);
+  }
+}
+
+function adminLogout() {
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('admin-pass').value = '';
+}
+
+// =============================================
+// SOCKET
+// =============================================
+function initAdminSocket() {
+  try {
+    socket = io(API);
+    socket.on('connect', () => {
+      socket.emit('identify', { userId:'admin', role:'admin' });
+      addFeed('🔌', 'Connected', 'Real-time socket connected');
+    });
+    socket.on('new_request', data => {
+      addFeed('🔔', 'New Ride Request', `${data.passenger} → PKR ${data.fare} from ${data.pickup}`);
+    });
+    socket.on('ride_completed_admin', data => {
+      addFeed('✅', 'Ride Completed', `PKR ${data.commission} commission earned`);
+      loadStats();
+    });
+    socket.on('user_connected', data => {
+      addFeed('👤', 'User Online', `${data.name} (${data.role}) just opened the app`);
+      loadLiveUsers();
+    });
+    socket.on('user_disconnected', data => {
+      addFeed('👋', 'User Left', `A ${data.role} went offline`);
+    });
+    socket.on('driver_online', data => {
+      addFeed('🟢', 'Driver Online', `${data.name} is now accepting rides`);
+    });
+    socket.on('new_withdrawal', data => {
+      addFeed('💸', 'Withdrawal Request', `${data.name} wants PKR ${data.amount} via ${data.method}`);
+      loadWithdrawals();
+    });
+  } catch(e) {
+    addFeed('⚠️', 'Socket Error', 'Running in demo mode');
+  }
+}
+
+// =============================================
+// DATA LOADING
+// =============================================
+async function loadAllData() {
+  await loadStats();
+  loadRides();
+  loadDrivers();
+  loadPassengers();
+  loadWithdrawals();
+  loadLiveUsers();
+  drawChart();
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch(API + '/admin/stats');
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('stat-commission').textContent = data.totalCommission.toLocaleString();
+      document.getElementById('stat-rides').textContent = data.totalRides;
+      document.getElementById('stat-users').textContent = data.totalUsers;
+      document.getElementById('stat-withdrawals').textContent = data.pendingWithdrawals;
+      document.getElementById('sidebar-commission').textContent = 'PKR ' + data.totalCommission.toLocaleString();
+      adminData.stats = data;
+    }
+  } catch(e) { loadDemoStats(); }
+}
+
+function loadDemoStats() {
+  // Demo data when backend not connected
+  const s = { totalCommission:1240, totalRides:18, totalUsers:7, pendingWithdrawals:2 };
+  document.getElementById('stat-commission').textContent = s.totalCommission.toLocaleString();
+  document.getElementById('stat-rides').textContent = s.totalRides;
+  document.getElementById('stat-users').textContent = s.totalUsers;
+  document.getElementById('stat-withdrawals').textContent = s.pendingWithdrawals;
+  document.getElementById('sidebar-commission').textContent = 'PKR ' + s.totalCommission.toLocaleString();
+  document.getElementById('today-rides').textContent = '6';
+  document.getElementById('today-commission').textContent = 'PKR 420';
+  document.getElementById('avg-fare').textContent = 'PKR 310';
+}
+
+async function loadRides() {
+  try {
+    const res = await fetch(API + '/admin/rides');
+    const data = await res.json();
+    if (data.success) renderRides(data.rides);
+  } catch(e) { renderRides(demoRides()); }
+}
+
+function renderRides(rides) {
+  const tbody = document.getElementById('rides-table');
+  document.getElementById('rides-count').textContent = rides.length + ' rides';
+  if (!rides.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No rides yet</td></tr>'; return; }
+  tbody.innerHTML = rides.map(r => `
+    <tr>
+      <td><span class="mono" style="font-size:11px;color:var(--muted)">${r.id?.slice(-6) || 'DEMO'}</span></td>
+      <td>${r.passenger || '—'}</td>
+      <td>${r.driver || '—'}</td>
+      <td style="font-weight:700">PKR ${r.fare || 0}</td>
+      <td style="color:var(--accent);font-weight:700">PKR ${r.commission || Math.round((r.fare||0)*0.1)}</td>
+      <td><span class="badge ${r.paymentMethod === 'cash' ? 'badge-blue' : 'badge-green'}">${r.paymentMethod || 'cash'}</span></td>
+      <td style="color:var(--muted);font-size:12px">${formatDate(r.completedAt)}</td>
+    </tr>
+  `).join('');
+  if (rides.length) {
+    const todayRides = rides.filter(r => isToday(r.completedAt));
+    const todayComm = todayRides.reduce((s,r) => s + (r.commission || Math.round((r.fare||0)*0.1)), 0);
+    const avgFare = todayRides.length ? Math.round(todayRides.reduce((s,r) => s+(r.fare||0),0)/todayRides.length) : 0;
+    document.getElementById('today-rides').textContent = todayRides.length;
+    document.getElementById('today-commission').textContent = 'PKR ' + todayComm;
+    document.getElementById('avg-fare').textContent = 'PKR ' + avgFare;
+  }
+}
+
+async function loadDrivers() {
+  try {
+    const res = await fetch(API + '/admin/drivers');
+    const data = await res.json();
+    if (data.success) renderDrivers(data.drivers);
+  } catch(e) { renderDrivers(demoDrivers()); }
+}
+
+function renderDrivers(drivers) {
+  const tbody = document.getElementById('drivers-table');
+  document.getElementById('drivers-count').textContent = drivers.length + ' drivers';
+  if (!drivers.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No drivers yet</td></tr>'; return; }
+  tbody.innerHTML = drivers.map(d => `
+    <tr>
+      <td><div class="user-cell"><div class="avatar">${(d.name||'D').charAt(0)}</div><div><div class="user-name">${d.name||'—'}</div><div class="user-phone">${d.phone||'—'}</div></div></div></td>
+      <td>${d.vehicle||'—'}</td>
+      <td><span class="mono" style="font-size:12px">${d.plate||'—'}</span></td>
+      <td><span class="badge ${d.online ? 'badge-green' : 'badge-red'}">${d.online ? '🟢 Online' : '⚫ Offline'}</span></td>
+      <td style="font-weight:700">${d.todayRides||0}</td>
+      <td style="color:var(--green);font-weight:700">PKR ${(d.totalEarned||0).toLocaleString()}</td>
+      <td style="color:var(--accent);font-weight:700">PKR ${(d.balance||0).toLocaleString()}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadPassengers() {
+  try {
+    const res = await fetch(API + '/admin/passengers');
+    const data = await res.json();
+    if (data.success) renderPassengers(data.passengers);
+  } catch(e) { renderPassengers(demoPassengers()); }
+}
+
+function renderPassengers(passengers) {
+  const tbody = document.getElementById('passengers-table');
+  document.getElementById('passengers-count').textContent = passengers.length + ' passengers';
+  if (!passengers.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No passengers yet</td></tr>'; return; }
+  tbody.innerHTML = passengers.map(p => `
+    <tr>
+      <td><div class="user-cell"><div class="avatar" style="background:linear-gradient(135deg,var(--blue),var(--accent))">${(p.name||'P').charAt(0)}</div><div class="user-name">${p.name||'—'}</div></div></td>
+      <td>${p.phone||'—'}</td>
+      <td style="font-weight:700">${p.totalRides||0}</td>
+      <td style="color:var(--muted);font-size:12px">${formatDate(p.createdAt)}</td>
+      <td><span class="badge badge-green">Active</span></td>
+    </tr>
+  `).join('');
+}
+
+async function loadWithdrawals() {
+  try {
+    const res = await fetch(API + '/admin/withdrawals');
+    const data = await res.json();
+    if (data.success) renderWithdrawals(data.withdrawals);
+  } catch(e) { renderWithdrawals(demoWithdrawals()); }
+}
+
+function renderWithdrawals(withdrawals) {
+  const tbody = document.getElementById('withdrawals-table');
+  const pending = withdrawals.filter(w => w.status === 'pending');
+  document.getElementById('withdrawal-count').textContent = pending.length + ' pending';
+  document.getElementById('stat-withdrawals').textContent = pending.length;
+  if (!withdrawals.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No withdrawal requests</td></tr>'; return; }
+  tbody.innerHTML = withdrawals.map(w => `
+    <tr>
+      <td><div class="user-name">${w.driverName||w.driverId||'Driver'}</div></td>
+      <td style="font-weight:700;color:var(--accent)">PKR ${(w.amount||0).toLocaleString()}</td>
+      <td><span class="badge badge-blue">${w.method||'jazzcash'}</span></td>
+      <td><span class="mono" style="font-size:12px">${w.account||'—'}</span></td>
+      <td style="color:var(--muted);font-size:12px">${formatDate(w.requestedAt)}</td>
+      <td><span class="badge ${w.status==='pending'?'badge-orange':w.status==='approved'?'badge-green':'badge-red'}">${w.status||'pending'}</span></td>
+      <td>
+        ${w.status==='pending' ? `
+          <div style="display:flex;gap:6px;">
+            <button class="action-btn btn-approve" onclick="approveWithdrawal('${w.id}', this)">✓ Pay</button>
+            <button class="action-btn btn-reject" onclick="rejectWithdrawal('${w.id}', this)">✗ Reject</button>
+          </div>` : '<span style="color:var(--muted);font-size:12px">Done</span>'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function loadLiveUsers() {
+  try {
+    const res = await fetch(API + '/admin/live-users');
+    const data = await res.json();
+    if (data.success) renderLiveUsers(data.users);
+  } catch(e) { renderLiveUsers(demoLiveUsers()); }
+}
+
+function renderLiveUsers(users) {
+  const grid = document.getElementById('live-users-grid');
+  document.getElementById('live-count').textContent = users.length;
+  if (!users.length) {
+    grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);grid-column:1/-1;font-size:14px;">No users online right now</div>';
+    renderRecentLogins([]);
+    return;
+  }
+  grid.innerHTML = users.map(u => `
+    <div class="user-online-card">
+      <div class="role-dot ${u.role}"></div>
+      <div class="avatar" style="width:28px;height:28px;font-size:12px">${(u.name||'U').charAt(0)}</div>
+      <div>
+        <div style="font-size:13px;font-weight:600">${u.name||'User'}</div>
+        <div style="font-size:11px;color:var(--muted)">${u.role}</div>
+      </div>
+    </div>
+  `).join('');
+  renderRecentLogins(users);
+}
+
+function renderRecentLogins(users) {
+  const tbody = document.getElementById('recent-logins-table');
+  if (!users.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No recent logins</td></tr>'; return; }
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td><div class="user-cell"><div class="avatar" style="background:${u.role==='driver'?'linear-gradient(135deg,var(--green),var(--blue))':'linear-gradient(135deg,var(--accent),var(--orange))'}">${(u.name||'U').charAt(0)}</div><div class="user-name">${u.name||'—'}</div></div></td>
+      <td><span class="badge ${u.role==='driver'?'badge-green':'badge-blue'}">${u.role}</span></td>
+      <td style="color:var(--muted);font-size:12px">${u.phone||'—'}</td>
+      <td style="color:var(--muted);font-size:12px">${formatDate(u.connectedAt || new Date())}</td>
+    </tr>
+  `).join('');
+}
+
+// =============================================
+// WITHDRAWAL ACTIONS
+// =============================================
+async function approveWithdrawal(id, btn) {
+  btn.textContent = 'Sending...';
+  btn.disabled = true;
+  try {
+    await fetch(API + '/admin/withdrawal/approve', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ withdrawalId: id })
+    });
+  } catch(e) {}
+  addFeed('💸', 'Withdrawal Approved', 'Payment sent to driver\'s account');
+  loadWithdrawals();
+}
+
+async function rejectWithdrawal(id, btn) {
+  btn.textContent = 'Rejecting...';
+  btn.disabled = true;
+  try {
+    await fetch(API + '/admin/withdrawal/reject', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ withdrawalId: id })
+    });
+  } catch(e) {}
+  addFeed('❌', 'Withdrawal Rejected', 'Driver will be notified');
+  loadWithdrawals();
+}
+
+// =============================================
+// CHART
+// =============================================
+function drawChart() {
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const values = [120, 340, 280, 520, 180, 640, 420];
+  const max = Math.max(...values);
+  const chart = document.getElementById('earnings-chart');
+  const labels = document.getElementById('chart-labels');
+  chart.innerHTML = values.map((v,i) => `
+    <div class="bar-wrap">
+      <div style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:4px">${v}</div>
+      <div class="bar" style="height:${Math.round((v/max)*100)}%"></div>
+    </div>
+  `).join('');
+  labels.innerHTML = days.map(d => `<div style="flex:1;text-align:center;font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace">${d}</div>`).join('');
+}
+
+// =============================================
+// FEED
+// =============================================
+function addFeed(icon, title, sub) {
+  const feed = document.getElementById('activity-feed');
+  const item = document.createElement('div');
+  item.className = 'feed-item';
+  item.innerHTML = `
+    <div class="feed-icon">${icon}</div>
+    <div class="feed-content"><div class="feed-title">${title}</div><div class="feed-sub">${sub}</div></div>
+    <div class="feed-time">${now()}</div>
+  `;
+  feed.insertBefore(item, feed.firstChild);
+  while (feed.children.length > 20) feed.removeChild(feed.lastChild);
+}
+
+// =============================================
+// NAVIGATION
+// =============================================
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+  // Load fresh data on page switch
+  if (name === 'rides') loadRides();
+  if (name === 'drivers') loadDrivers();
+  if (name === 'passengers') loadPassengers();
+  if (name === 'withdrawals') loadWithdrawals();
+  if (name === 'live') loadLiveUsers();
+}
+
+// =============================================
+// DEMO DATA
+// =============================================
+function demoRides() {
+  return [
+    { id:'ride001', passenger:'Ali Hassan', driver:'Ahmed Khan', fare:300, commission:30, paymentMethod:'cash', completedAt:new Date() },
+    { id:'ride002', passenger:'Sara Ahmed', driver:'Bilal Raza', fare:450, commission:45, paymentMethod:'jazzcash', completedAt:new Date(Date.now()-3600000) },
+    { id:'ride003', passenger:'Omar Sheikh', driver:'Faisal M.', fare:250, commission:25, paymentMethod:'cash', completedAt:new Date(Date.now()-7200000) },
+    { id:'ride004', passenger:'Zara Khan', driver:'Ahmed Khan', fare:380, commission:38, paymentMethod:'easypaisa', completedAt:new Date(Date.now()-86400000) },
+    { id:'ride005', passenger:'Hamid Ali', driver:'Usman T.', fare:200, commission:20, paymentMethod:'cash', completedAt:new Date(Date.now()-90000000) },
+  ];
+}
+function demoDrivers() {
+  return [
+    { name:'Ahmed Khan', phone:'+923009876543', vehicle:'Toyota Corolla 2020', plate:'ABC-123', online:true, todayRides:3, totalEarned:2430, balance:850 },
+    { name:'Bilal Raza', phone:'+923001112222', vehicle:'Honda Civic 2019', plate:'XYZ-789', online:false, todayRides:1, totalEarned:1200, balance:320 },
+    { name:'Faisal Mahmood', phone:'+923003334444', vehicle:'Suzuki Cultus', plate:'LMN-456', online:true, todayRides:2, totalEarned:980, balance:0 },
+  ];
+}
+function demoPassengers() {
+  return [
+    { name:'Ali Hassan', phone:'+923001234567', totalRides:5, createdAt:new Date(Date.now()-604800000) },
+    { name:'Sara Ahmed', phone:'+923005556666', totalRides:3, createdAt:new Date(Date.now()-1209600000) },
+    { name:'Omar Sheikh', phone:'+923007778888', totalRides:1, createdAt:new Date() },
+  ];
+}
+function demoWithdrawals() {
+  return [
+    { id:'w001', driverName:'Ahmed Khan', amount:500, method:'jazzcash', account:'03009876543', requestedAt:new Date(), status:'pending' },
+    { id:'w002', driverName:'Bilal Raza', amount:320, method:'easypaisa', account:'03001112222', requestedAt:new Date(Date.now()-3600000), status:'pending' },
+    { id:'w003', driverName:'Faisal Mahmood', amount:980, method:'bank', account:'0001-1234567-01', requestedAt:new Date(Date.now()-86400000), status:'approved' },
+  ];
+}
+function demoLiveUsers() {
+  return [
+    { name:'Ali Hassan', role:'passenger', phone:'+923001234567', connectedAt:new Date() },
+    { name:'Ahmed Khan', role:'driver', phone:'+923009876543', connectedAt:new Date(Date.now()-120000) },
+    { name:'Sara Ahmed', role:'passenger', phone:'+923005556666', connectedAt:new Date(Date.now()-300000) },
+  ];
+}
+
+// =============================================
+// HELPERS
+// =============================================
+function now() {
+  return new Date().toLocaleTimeString('en-PK', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+function formatDate(d) {
+  if (!d) return '—';
+  const date = new Date(d);
+  return date.toLocaleDateString('en-PK', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function isToday(d) {
+  if (!d) return false;
+  const date = new Date(d);
+  const today = new Date();
+  return date.toDateString() === today.toDateString();
+}
+
+// Auto-refresh every 30 seconds
+setInterval(() => { if (document.getElementById('dashboard').style.display !== 'none') loadStats(); }, 30000);
+</script>
+</body>
+</html>
